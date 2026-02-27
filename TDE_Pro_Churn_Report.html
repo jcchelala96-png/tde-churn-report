@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TDE Pro — Churn & Retention Report</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; }
+  .header { background: linear-gradient(135deg, #1B2A4A 0%, #2d4a7a 100%); color: white; padding: 40px; }
+  .header h1 { font-size: 28px; margin-bottom: 8px; }
+  .header p { opacity: 0.8; font-size: 14px; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+  .tab-wrapper { background: #1B2A4A; }
+  .tab-wrapper-inner { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin: 0 0 24px 0; }
+  .kpi-card { background: white; border-radius: 12px; padding: 20px; text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .kpi-card .label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .kpi-card .value { font-size: 32px; font-weight: 700; color: #1B2A4A; }
+  .kpi-card .pct { font-size: 13px; color: #999; margin-top: 4px; }
+  .kpi-card.active .value { color: #4CAF50; }
+  .kpi-card.pending .value { color: #FFC107; }
+  .kpi-card.churn .value { color: #FF9800; }
+  .kpi-card.refund .value { color: #F44336; }
+  .section { background: white; border-radius: 12px; padding: 28px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .section h2 { font-size: 18px; color: #1B2A4A; margin-bottom: 20px; border-bottom: 2px solid #f0f2f5; padding-bottom: 12px; }
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+  .chart-box { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .chart-box h3 { font-size: 15px; color: #1B2A4A; margin-bottom: 16px; }
+  .chart-container { position: relative; height: 300px; }
+  .revenue-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px; }
+  .rev-card { background: #f8f9fb; border-radius: 10px; padding: 16px; text-align: center; }
+  .rev-card .label { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .rev-card .value { font-size: 22px; font-weight: 700; color: #1B2A4A; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #1B2A4A; color: white; padding: 10px 14px; text-align: center; font-weight: 600; }
+  td { padding: 10px 14px; text-align: center; border-bottom: 1px solid #eee; }
+  tr:hover { background: #f8f9fb; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-active { background: #E8F5E9; color: #2E7D32; }
+  .badge-pending { background: #FFF9C4; color: #F57F17; }
+  .badge-churn { background: #FFF3E0; color: #E65100; }
+  .badge-refund { background: #FFEBEE; color: #C62828; }
+  .insight-box { background: linear-gradient(135deg, #FFF8E1 0%, #FFF3E0 100%); border-left: 4px solid #FF9800; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+  .insight-box strong { color: #E65100; }
+  .bf-highlight { background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-left: 4px solid #4CAF50; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+  .bf-highlight strong { color: #2E7D32; }
+  .conclusions { background: white; border-radius: 12px; padding: 28px; margin-bottom: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .conclusions h2 { font-size: 18px; color: #1B2A4A; margin-bottom: 20px; border-bottom: 2px solid #f0f2f5; padding-bottom: 12px; }
+  .conclusion-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .conclusion-card { border-radius: 10px; padding: 18px 20px; }
+  .conclusion-card.red { background: linear-gradient(135deg, #FFEBEE 0%, #FFCDD2 100%); border-left: 4px solid #F44336; }
+  .conclusion-card.orange { background: linear-gradient(135deg, #FFF3E0 0%, #FFE0B2 100%); border-left: 4px solid #FF9800; }
+  .conclusion-card.green { background: linear-gradient(135deg, #E8F5E9 0%, #C8E6C9 100%); border-left: 4px solid #4CAF50; }
+  .conclusion-card.blue { background: linear-gradient(135deg, #E3F2FD 0%, #BBDEFB 100%); border-left: 4px solid #2196F3; }
+  .conclusion-card .c-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .conclusion-card.red .c-title { color: #C62828; }
+  .conclusion-card.orange .c-title { color: #E65100; }
+  .conclusion-card.green .c-title { color: #2E7D32; }
+  .conclusion-card.blue .c-title { color: #1565C0; }
+  .conclusion-card p { font-size: 13px; color: #333; line-height: 1.6; }
+
+  /* Tab Navigation */
+  .tab-nav { display: flex; gap: 0; }
+  .tab-btn { padding: 14px 28px; background: transparent; border: none; color: rgba(255,255,255,0.6); font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; border-bottom: 3px solid transparent; }
+  .tab-btn:hover { color: white; background: rgba(255,255,255,0.08); }
+  .tab-btn.active { color: white; background: rgba(255,255,255,0.15); border-bottom-color: #FFC107; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Churn Reasons styles */
+  .reason-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .reason-bar .bar-label { width: 160px; font-size: 13px; font-weight: 600; color: #1B2A4A; text-align: right; flex-shrink: 0; }
+  .reason-bar .bar-track { flex: 1; height: 32px; background: #f0f2f5; border-radius: 6px; position: relative; overflow: hidden; }
+  .reason-bar .bar-fill { height: 100%; border-radius: 6px; display: flex; align-items: center; padding-left: 10px; color: white; font-size: 12px; font-weight: 600; transition: width 0.6s ease; }
+  .reason-bar .bar-count { width: 50px; font-size: 13px; color: #666; text-align: left; flex-shrink: 0; }
+  .quote-card { background: #f8f9fb; border-radius: 8px; padding: 14px 18px; margin-bottom: 10px; border-left: 3px solid #ddd; }
+  .quote-card .quote-text { font-size: 13px; color: #444; font-style: italic; line-height: 1.5; }
+  .quote-card .quote-meta { font-size: 11px; color: #999; margin-top: 6px; }
+  .quote-card.positive { border-left-color: #4CAF50; }
+  .quote-card.negative { border-left-color: #F44336; }
+  .quote-card.neutral { border-left-color: #FFC107; }
+  .sentiment-pill { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .sentiment-pill.positive { background: #E8F5E9; color: #2E7D32; }
+  .sentiment-pill.negative { background: #FFEBEE; color: #C62828; }
+  .sentiment-pill.neutral { background: #FFF9C4; color: #F57F17; }
+
+  /* Semantic Review tab styles */
+  .review-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; background: white; border-radius: 12px; padding: 18px 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .leg { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #333; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+  .review-table-wrap { background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.06); margin-bottom: 24px; }
+  .review-table-wrap table { font-size: 12.5px; }
+  .review-table-wrap th { text-align: left; white-space: nowrap; }
+  .row-excluded td { background: #f5f5f5 !important; color: #aaa; }
+  .row-num { color: #bbb; font-size: 11px; font-weight: 600; }
+  .text-cell { max-width: 340px; color: #444; }
+  .action-cancel { color: #E65100; font-weight: 600; }
+  .action-other  { color: #888; font-style: italic; }
+  .action-pause  { color: #1565C0; }
+  .excluded-label { font-size: 11px; color: #bbb; font-style: italic; }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+  .pill-positive { background: #E8F5E9; color: #2E7D32; }
+  .pill-neutral  { background: #FFF9C4; color: #B8860B; }
+  .pill-negative { background: #FFEBEE; color: #C62828; }
+  .pill-excluded { background: #EEEEEE; color: #999; }
+  .cat { display: inline-block; padding: 2px 7px; border-radius: 8px; font-size: 10.5px; font-weight: 600; margin: 1px 2px 1px 0; white-space: nowrap; }
+  .c1  { background: #E3F0FF; color: #1565C0; }
+  .c2  { background: #FFF3E0; color: #E65100; }
+  .c3  { background: #F3E5F5; color: #7B1FA2; }
+  .c4  { background: #FFEBEE; color: #C62828; }
+  .c5  { background: #ECEFF1; color: #455A64; }
+  .c6  { background: #FCE4EC; color: #880E4F; }
+  .c7  { background: #EFEBE9; color: #4E342E; }
+  .c8  { background: #F1F8E9; color: #33691E; }
+  .c9  { background: #FFF8E1; color: #FF8F00; }
+  .c10 { background: #E8F5E9; color: #1B5E20; }
+  .cnf { background: #EEEEEE; color: #999; }
+  .review-notes { background: white; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); font-size: 13px; color: #555; line-height: 1.8; margin-bottom: 24px; }
+
+  @media (max-width: 768px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .chart-row { grid-template-columns: 1fr; }
+    .revenue-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="container">
+    <h1>TDE Pro — Churn & Retention Analysis</h1>
+    <p>Annual Breakdown Report | Generated February 24, 2026 | 103 Total Members</p>
+  </div>
+</div>
+
+<!-- Tab Navigation — fused with header -->
+<div class="tab-wrapper">
+  <div class="tab-wrapper-inner">
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('metrics')">Churn Metrics</button>
+      <button class="tab-btn" onclick="switchTab('reasons')">Churn Reasons & Feedback</button>
+      <button class="tab-btn" onclick="switchTab('review')">Semantic Review</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- TAB 1: METRICS -->
+  <div id="tab-metrics" class="tab-content active">
+
+  <!-- KPI Cards -->
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="label">Total Members</div><div class="value">103</div><div class="pct">100%</div></div>
+    <div class="kpi-card active"><div class="label">Active (Confirmed)</div><div class="value">40</div><div class="pct">38.8%</div></div>
+    <div class="kpi-card pending"><div class="label">Pending Renewal</div><div class="value">37</div><div class="pct">35.9%</div></div>
+    <div class="kpi-card churn"><div class="label">Churned</div><div class="value">19</div><div class="pct">18.4%</div></div>
+    <div class="kpi-card refund"><div class="label">Refunded</div><div class="value">7</div><div class="pct">6.8%</div></div>
+  </div>
+
+  <!-- Revenue -->
+  <div class="section">
+    <h2>Revenue Overview</h2>
+    <div class="revenue-grid">
+      <div class="rev-card"><div class="label">Total Collected</div><div class="value">$75,700</div></div>
+      <div class="rev-card"><div class="label">Net Revenue</div><div class="value" style="color:#4CAF50">$70,200</div></div>
+      <div class="rev-card"><div class="label">Lost (Refunds)</div><div class="value" style="color:#F44336">$5,500</div></div>
+      <div class="rev-card"><div class="label">At Risk (Churn)</div><div class="value" style="color:#FF9800">$13,300</div></div>
+      <div class="rev-card"><div class="label">At Risk (Pending)</div><div class="value" style="color:#FFC107">$26,200</div></div>
+    </div>
+    <div class="insight-box">
+      <strong>Key Insight:</strong> $39,500 in revenue is at risk from churn ($13,300) and pending renewals ($26,200) combined — that's 52.2% of total collected revenue.
+    </div>
+  </div>
+
+  <!-- Charts Row 1 -->
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>Member Status Distribution</h3>
+      <div class="chart-container"><canvas id="statusPie"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h3>Churn & Refund by Plan Tier</h3>
+      <div class="chart-container"><canvas id="tierBar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts Row 2 -->
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>Churn & Refund by Payment Method</h3>
+      <div class="chart-container"><canvas id="paymentBar"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h3>Cross Analysis: Plan × Payment</h3>
+      <div class="chart-container"><canvas id="crossBar"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Churn by Plan Tier -->
+  <div class="section">
+    <h2>Churn by Plan Tier ($700 vs $1000)</h2>
+    <table>
+      <thead><tr><th>Plan Tier</th><th>Total</th><th>Active</th><th>Pending</th><th>Churn</th><th>Churn Rate</th><th>Total Loss Rate</th></tr></thead>
+      <tbody>
+        <tr><td><strong>$700 (DYD Legacy)</strong></td><td>78</td><td>30</td><td>25</td><td>19</td><td>24.4%</td><td>29.5%</td></tr>
+        <tr><td><strong>$1000 (Current)</strong></td><td>25</td><td>10</td><td>12</td><td>0</td><td>0.0%</td><td>12.0%</td></tr>
+      </tbody>
+    </table>
+    <div class="insight-box">
+      <strong>Insight:</strong> All 19 churned members came from the $700 legacy plan. The $1000 current plan has <strong>0 churn</strong>. Legacy members are 2.3x more likely to leave than current-price members.
+    </div>
+  </div>
+
+  <!-- Churn by Payment Method -->
+  <div class="section">
+    <h2>Churn by Payment Method</h2>
+    <table>
+      <thead><tr><th>Method</th><th>Total</th><th>Active</th><th>Pending</th><th>Churn</th><th>Churn Rate</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Credit Card (Thrivecart)</strong></td><td>56</td><td>33</td><td>0</td><td>18</td><td>32.1%</td></tr>
+        <tr><td><strong>Crypto</strong></td><td>47</td><td>7</td><td>37</td><td>1</td><td>2.1%</td></tr>
+      </tbody>
+    </table>
+    <div class="insight-box">
+      <strong>Critical Finding:</strong> Credit card churn rate is <strong>32.1%</strong> vs crypto at <strong>2.1%</strong> — a 15.3x difference. 18 of 19 churned members (95%) paid via credit card. The 37 pending crypto renewals are the biggest immediate opportunity to watch.
+    </div>
+  </div>
+
+  <!-- Cross Analysis -->
+  <div class="section">
+    <h2>Cross Analysis: Plan Tier × Payment Method</h2>
+    <table>
+      <thead><tr><th>Segment</th><th>Total</th><th>Active</th><th>Pending</th><th>Churn</th><th>Churn Rate</th></tr></thead>
+      <tbody>
+        <tr style="background:#FFF3E0"><td><strong>$700 + Credit Card</strong></td><td>46</td><td>24</td><td>0</td><td>18</td><td><strong style="color:#F44336">39.1%</strong></td></tr>
+        <tr><td><strong>$700 + Crypto</strong></td><td>32</td><td>6</td><td>25</td><td>1</td><td>3.1%</td></tr>
+        <tr><td><strong>$1000 + Credit Card</strong></td><td>10</td><td>9</td><td>0</td><td>0</td><td>0.0%</td></tr>
+        <tr><td><strong>$1000 + Crypto</strong></td><td>15</td><td>1</td><td>12</td><td>0</td><td>0.0%</td></tr>
+      </tbody>
+    </table>
+    <div class="insight-box">
+      <strong>Biggest Problem:</strong> The <strong>$700 + Credit Card</strong> segment is responsible for 18 of 19 churns — 95% of all churn comes from this single group. Every other segment is at 0–3% churn.
+    </div>
+  </div>
+
+  <!-- Black Friday -->
+  <div class="section">
+    <h2>Black Friday Deal Analysis</h2>
+    <div class="revenue-grid" style="grid-template-columns: repeat(4, 1fr);">
+      <div class="rev-card"><div class="label">BF Members</div><div class="value">16</div></div>
+      <div class="rev-card"><div class="label">BF Revenue</div><div class="value">$16,800</div></div>
+      <div class="rev-card"><div class="label">Annual Renewals</div><div class="value">13</div></div>
+      <div class="rev-card"><div class="label">Lifetime Purchases</div><div class="value">2</div></div>
+    </div>
+    <div class="bf-highlight">
+      <strong>BF members have 0% churn and 0% refund rate.</strong> All 16 members who purchased during Black Friday remain active or pending renewal. BF deals generated $16,800 in additional revenue and appear to strongly correlate with retention.
+    </div>
+    <div class="chart-row" style="margin-top:20px">
+      <div class="chart-box">
+        <h3>BF Plan Type Distribution</h3>
+        <div class="chart-container"><canvas id="bfPie"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <h3>BF Member Status</h3>
+        <div class="chart-container"><canvas id="bfStatus"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Key Conclusions -->
+  <div class="conclusions">
+    <h2>Key Conclusions & Takeaways</h2>
+    <div class="conclusion-grid">
+      <div class="conclusion-card red">
+        <div class="c-title">🚨 The Core Problem: $700 + Credit Card</div>
+        <p>Nearly half of all members in the $700 Legacy + Credit Card segment churned (39.1% churn rate). This single group is responsible for 95% of all churn (18 of 19). If you solve this segment, you essentially solve the churn problem.</p>
+      </div>
+      <div class="conclusion-card orange">
+        <div class="c-title">⚠️ $51K Revenue at Risk Right Now</div>
+        <p>$39,500 in revenue is currently at risk — $13,300 from confirmed churn and $26,200 from 37 crypto members with overdue renewal dates. Following up on pending crypto renewals is the single highest-leverage action this week.</p>
+      </div>
+      <div class="conclusion-card green">
+        <div class="c-title">✅ The $1000 Plan Is Working</div>
+        <p>The current $1000 plan has 0 confirmed churn. Members who joined at full price are staying. This validates the pricing and perceived value. The focus should be on converting legacy $700 members and retaining pending crypto renewals.</p>
+      </div>
+      <div class="conclusion-card blue">
+        <div class="c-title">💡 Crypto Members Are Your Most Loyal Segment</div>
+        <p>Crypto payers churn at 2.1% vs 32.1% for credit card — a 15.3x difference. Members who choose to pay via crypto may have stronger conviction in the product. However, 37 are pending renewal and need outreach to confirm commitment.</p>
+      </div>
+      <div class="conclusion-card green">
+        <div class="c-title">🎯 Black Friday Deals Drive Retention</div>
+        <p>All 16 Black Friday members are still active or pending renewal — 0% churn, 0% refund. BF deals not only generated $16,800 in extra revenue but produced the most loyal cohort in the entire member base. This strategy should be repeated.</p>
+      </div>
+      <div class="conclusion-card orange">
+        <div class="c-title">📊 True Active Rate Is Still Uncertain</div>
+        <p>Only 39.8% of members are confirmed active. 35.9% are in a "pending" limbo — these are crypto members whose renewal dates have passed but haven't been formally marked as churned. Resolving this ambiguity is critical for accurate retention reporting going forward.</p>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- end tab-metrics -->
+
+  <!-- TAB 2: CHURN REASONS -->
+  <div id="tab-reasons" class="tab-content">
+
+  <!-- Reasons KPIs -->
+  <div class="kpi-grid" style="grid-template-columns: repeat(4, 1fr); margin-top: 24px;">
+    <div class="kpi-card"><div class="label">Cancellation Forms</div><div class="value">27</div><div class="pct">Since Nov 16, 2025</div></div>
+    <div class="kpi-card active"><div class="label">Positive Sentiment</div><div class="value" style="color:#4CAF50">41%</div><div class="pct">11 members</div></div>
+    <div class="kpi-card pending"><div class="label">Neutral Sentiment</div><div class="value" style="color:#FFC107">44%</div><div class="pct">12 members</div></div>
+    <div class="kpi-card" style=""><div class="label">Negative Sentiment</div><div class="value" style="color:#F44336">15%</div><div class="pct">4 members</div></div>
+  </div>
+
+  <div class="bf-highlight">
+    <strong>Good News:</strong> 85% of churned members left with positive or neutral sentiment. Many explicitly said they love the product and plan to return. The #1 reason for leaving is not dissatisfaction — it's lack of time.
+  </div>
+
+  <!-- Top Churn Reasons -->
+  <div class="section">
+    <h2>Top Cancellation Reasons (Semantic Analysis)</h2>
+    <p style="font-size:13px; color:#666; margin-bottom:20px;">Each cancellation was analyzed for underlying reasons. Members may cite multiple reasons — totals exceed 100%.</p>
+
+    <div class="reason-bar"><div class="bar-label">No Time / Too Busy</div><div class="bar-track"><div class="bar-fill" style="width:100%; background: linear-gradient(90deg, #1B2A4A, #2d4a7a);">48%</div></div><div class="bar-count">13 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Content Mismatch</div><div class="bar-track"><div class="bar-fill" style="width:23%; background: linear-gradient(90deg, #FF9800, #FFB74D);">11%</div></div><div class="bar-count">3 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Language Barrier</div><div class="bar-track"><div class="bar-fill" style="width:23%; background: linear-gradient(90deg, #9C27B0, #CE93D8);">11%</div></div><div class="bar-count">3 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Content Overload</div><div class="bar-track"><div class="bar-fill" style="width:23%; background: linear-gradient(90deg, #F44336, #EF9A9A);">11%</div></div><div class="bar-count">3 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Left Crypto</div><div class="bar-track"><div class="bar-fill" style="width:23%; background: linear-gradient(90deg, #607D8B, #90A4AE);">11%</div></div><div class="bar-count">3 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Platform UX Issues</div><div class="bar-track"><div class="bar-fill" style="width:15%; background: linear-gradient(90deg, #E91E63, #F48FB1);">7%</div></div><div class="bar-count">2 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Content Quality</div><div class="bar-track"><div class="bar-fill" style="width:15%; background: linear-gradient(90deg, #795548, #BCAAA4);">7%</div></div><div class="bar-count">2 members</div></div>
+    <div class="reason-bar"><div class="bar-label">Other / Minor</div><div class="bar-track"><div class="bar-fill" style="width:23%; background: linear-gradient(90deg, #999, #bbb);">11%</div></div><div class="bar-count">3 members</div></div>
+
+    <div class="insight-box" style="margin-top: 20px;">
+      <strong>Key Pattern:</strong> Nearly half of all cancellations (48%) are purely about <strong>time constraints</strong>, not product dissatisfaction. These are "Mike" members — busy people with 9-to-5 jobs who want to engage but can't find the time. The second cluster involves <strong>content expectations</strong>: members who expected more DeFi-specific strategies, found content overlapping with DYD, or felt overwhelmed by volume.
+    </div>
+  </div>
+
+  <!-- Charts Row -->
+  <div class="chart-row">
+    <div class="chart-box">
+      <h3>Cancellation Reasons Distribution</h3>
+      <div class="chart-container"><canvas id="reasonsBar"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h3>Sentiment Analysis</h3>
+      <div class="chart-container"><canvas id="sentimentPie"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Deep Dive: No Time -->
+  <div class="section">
+    <h2>Deep Dive: "No Time" — The #1 Reason (48%)</h2>
+    <p style="font-size:13px; color:#666; margin-bottom:16px;">These members are not unhappy — they're overwhelmed by life. Most express clear intent to return and praise the product. This is a retention opportunity, not a product problem.</p>
+
+    <div class="quote-card positive">
+      <div class="quote-text">"I love it. Just have no time lately."</div>
+      <div class="quote-meta"><span class="sentiment-pill positive">Positive</span> — Nov 2025</div>
+    </div>
+    <div class="quote-card positive">
+      <div class="quote-text">"TDE Pro ist amazing and you guys are great. But my Priority changed and I don't have the time I need to fully use it like I want to."</div>
+      <div class="quote-meta"><span class="sentiment-pill positive">Positive</span> — Jan 2026</div>
+    </div>
+    <div class="quote-card positive">
+      <div class="quote-text">"I've been a long time DeFi Edge, DYD alumni and TDE user so I'm a big supporter. I will be back when I'm trading again!"</div>
+      <div class="quote-meta"><span class="sentiment-pill positive">Positive</span> — Feb 2026</div>
+    </div>
+    <div class="quote-card positive">
+      <div class="quote-text">"Honestly, I have just been massively distracted by other things going on in my life for the past year... Seems like you guys are on a great trajectory."</div>
+      <div class="quote-meta"><span class="sentiment-pill positive">Positive</span> — Feb 2026</div>
+    </div>
+    <div class="quote-card neutral">
+      <div class="quote-text">"There are so many videos and I can't watch them all."</div>
+      <div class="quote-meta"><span class="sentiment-pill neutral">Neutral</span> — Jan 2026</div>
+    </div>
+  </div>
+
+  <!-- Deep Dive: Content Issues -->
+  <div class="section">
+    <h2>Deep Dive: Content & Platform Issues</h2>
+    <p style="font-size:13px; color:#666; margin-bottom:16px;">A smaller but actionable cluster — members who had specific issues with what was delivered, how it was delivered, or the platform experience.</p>
+
+    <h3 style="color:#FF9800; margin: 16px 0 12px;">Content Mismatch (11%)</h3>
+    <div class="quote-card neutral">
+      <div class="quote-text">"I expected this to be more DeFi oriented. I came after coming across with Double Your DeFi course."</div>
+      <div class="quote-meta"><span class="sentiment-pill neutral">Neutral</span> — Nov 2025</div>
+    </div>
+    <div class="quote-card negative">
+      <div class="quote-text">"The course that's the same things taught in double your defi. I had a really tough time understanding Melchior."</div>
+      <div class="quote-meta"><span class="sentiment-pill negative">Negative</span> — Dec 2025</div>
+    </div>
+
+    <h3 style="color:#F44336; margin: 20px 0 12px;">Content Overload (11%)</h3>
+    <div class="quote-card neutral">
+      <div class="quote-text">"Overload of things to look through. I am busy with other parts of my life, so generally not taking advantage of all the material here."</div>
+      <div class="quote-meta"><span class="sentiment-pill neutral">Neutral</span> — Dec 2025</div>
+    </div>
+    <div class="quote-card negative">
+      <div class="quote-text">"It felt unorganized and too much fluff."</div>
+      <div class="quote-meta"><span class="sentiment-pill negative">Negative</span> — Feb 2026</div>
+    </div>
+
+    <h3 style="color:#9C27B0; margin: 20px 0 12px;">Language Barrier (11%)</h3>
+    <div class="quote-card positive">
+      <div class="quote-text">"I was never able to use it properly because my English isn't very good. My native language is Spanish, and I disconnected quickly. It is easier for me to read in English than to listen to English content."</div>
+      <div class="quote-meta"><span class="sentiment-pill positive">Positive</span> — Suggestion: subtitles or Spanish content</div>
+    </div>
+
+    <h3 style="color:#E91E63; margin: 20px 0 12px;">Platform UX (7%)</h3>
+    <div class="quote-card negative">
+      <div class="quote-text">"Hard to use, don't like the platform they use. Lack of group chatting."</div>
+      <div class="quote-meta"><span class="sentiment-pill negative">Negative</span> — Nov 2025</div>
+    </div>
+
+    <h3 style="color:#795548; margin: 20px 0 12px;">Content Quality / Edgy Visibility (7%)</h3>
+    <div class="quote-card neutral">
+      <div class="quote-text">"I think the DYD course was super good, Edgy really stood out. I found when TDE started there was little action in the group, also a bit of a lack of focus too. More visibility of Edgy would have made things more interesting for me."</div>
+      <div class="quote-meta"><span class="sentiment-pill neutral">Neutral</span> — Feb 2026 — Long-time DYD supporter</div>
+    </div>
+  </div>
+
+  <!-- Conclusions for Tab 2 -->
+  <div class="conclusions">
+    <h2>Churn Feedback — Key Takeaways</h2>
+    <div class="conclusion-grid">
+      <div class="conclusion-card green">
+        <div class="c-title">✅ Product-Market Fit Is Strong</div>
+        <p>85% of churned members left with positive or neutral sentiment. Many explicitly said the product is "amazing" and they plan to return. This is not a product problem — it's a life-circumstances problem.</p>
+      </div>
+      <div class="conclusion-card blue">
+        <div class="c-title">💡 "Mike" Needs Bite-Sized Content</div>
+        <p>Your ideal user (Mike, busy 9-to-5) is exactly who's churning due to time constraints. Consider: daily 5-min digests, audio summaries for commuting, "start here" quick paths, and a weekly email with the top 3 things to focus on.</p>
+      </div>
+      <div class="conclusion-card orange">
+        <div class="c-title">⚠️ DYD → TDE Pro Transition Needs Work</div>
+        <p>Multiple DYD alumni felt TDE Pro content overlaps too much with DYD, or didn't match their expectation of "more DeFi strategies." Clearly differentiating TDE Pro from DYD in marketing and onboarding could reduce this friction.</p>
+      </div>
+      <div class="conclusion-card red">
+        <div class="c-title">🌍 Language Barrier Is a Silent Killer</div>
+        <p>At least 3 members (11%) cited language as a primary factor. They liked the product but couldn't engage with English-heavy video content. Subtitles, transcripts, or Spanish translations could unlock a retained segment.</p>
+      </div>
+      <div class="conclusion-card orange">
+        <div class="c-title">⚠️ Content Overload Feeds the "No Time" Problem</div>
+        <p>Members feel overwhelmed by the volume of content — too many tabs, too many videos, unclear where to start. Streamlining the onboarding and adding a "what to focus on this week" curation layer could directly address the top churn reason.</p>
+      </div>
+      <div class="conclusion-card blue">
+        <div class="c-title">💡 Pause Program Could Save Revenue</div>
+        <p>8 members requested pauses instead of cancellation. Many "No Time" churners said they'll return. A formal pause option (e.g., 1-3 months freeze at reduced rate) could retain members instead of losing them entirely.</p>
+      </div>
+    </div>
+  </div>
+
+  </div><!-- end tab-reasons -->
+
+  <!-- TAB 3: SEMANTIC REVIEW -->
+  <div id="tab-review" class="tab-content">
+
+  <div style="margin-top:24px;">
+    <div class="section" style="margin-bottom:16px;">
+      <h2>Semantic Classification — Quality Review</h2>
+      <p style="font-size:13px; color:#666; margin-top:-8px;">All 36 form submissions from Nov 16, 2025 onwards. Rows in grey were excluded (account questions, not cancellation feedback). Review each row's assigned category and reasoning.</p>
+    </div>
+
+    <!-- Category Legend -->
+    <div class="review-legend">
+      <strong style="font-size:12px; align-self:center; color:#1B2A4A; margin-right:4px;">Categories:</strong>
+      <div class="leg"><div class="dot" style="background:#1565C0"></div><span>No Time</span></div>
+      <div class="leg"><div class="dot" style="background:#E65100"></div><span>Content Mismatch</span></div>
+      <div class="leg"><div class="dot" style="background:#7B1FA2"></div><span>Language Barrier</span></div>
+      <div class="leg"><div class="dot" style="background:#C62828"></div><span>Content Overload</span></div>
+      <div class="leg"><div class="dot" style="background:#455A64"></div><span>Left Crypto</span></div>
+      <div class="leg"><div class="dot" style="background:#880E4F"></div><span>Platform UX</span></div>
+      <div class="leg"><div class="dot" style="background:#4E342E"></div><span>Content Quality</span></div>
+      <div class="leg"><div class="dot" style="background:#33691E"></div><span>Market Conditions</span></div>
+      <div class="leg"><div class="dot" style="background:#FF8F00"></div><span>Price</span></div>
+      <div class="leg"><div class="dot" style="background:#1B5E20"></div><span>Completed Content</span></div>
+      <div class="leg"><div class="dot" style="background:#bbb"></div><span>No Feedback</span></div>
+    </div>
+
+    <!-- Review Table -->
+    <div class="review-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Date</th>
+            <th>Action</th>
+            <th>Raw Text (summarized)</th>
+            <th>Category(ies)</th>
+            <th>Sentiment</th>
+            <th>Reasoning</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="row-num">00</td><td>2025-11-16</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"No time to dedicate" (repeated across all 3 fields)</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Pure time constraint, no product criticism.</td>
+          </tr>
+          <tr>
+            <td class="row-num">01</td><td>2025-11-16</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"hard for to say" / "no time, im busy with work"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Work is the stated reason. No product sentiment.</td>
+          </tr>
+          <tr>
+            <td class="row-num">02</td><td>2025-11-17</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"I love it. Just have no time lately." / "To keep up the great work"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Explicit praise + time excuse + encouraging closing.</td>
+          </tr>
+          <tr>
+            <td class="row-num">03</td><td>2025-11-19</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">Least: "token research" / "was expecting more Defi stuff"</td>
+            <td><span class="cat c2">Content Mismatch</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Expected more DeFi content. Misaligned expectations, not unhappy.</td>
+          </tr>
+          <tr>
+            <td class="row-num">04</td><td>2025-11-22</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">Least: "Token Radar" / "lots of value but expected more DeFi oriented" (came via DYD)</td>
+            <td><span class="cat c2">Content Mismatch</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Acknowledges value. DYD-to-TDE expectation gap.</td>
+          </tr>
+          <tr>
+            <td class="row-num">05</td><td>2025-11-23</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"hard to use, don't like the platform" / "lack of group chatting" / "did not find it useful"</td>
+            <td><span class="cat c6">Platform UX</span></td>
+            <td><span class="pill pill-negative">Negative</span></td>
+            <td style="font-size:12px; color:#555;">Explicit platform dislike + utility failure. No redeeming sentiment.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">06</td><td>2025-11-26</td><td class="action-other">Other</td>
+            <td class="text-cell">Japanese message asking about BF renewal dates</td>
+            <td><span class="excluded-label">Excluded — account question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">BF renewal inquiry, not cancellation.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">07</td><td>2025-11-26</td><td class="action-other">Other</td>
+            <td class="text-cell">English follow-up to row 06 asking about BF renewal period</td>
+            <td><span class="excluded-label">Excluded — account question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Duplicate of row 06 in English.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">08</td><td>2025-11-28</td><td class="action-other">Other</td>
+            <td class="text-cell">"can you please tell me when my membership ends?"</td>
+            <td><span class="excluded-label">Excluded — account question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Billing inquiry, not cancellation.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">09</td><td>2025-11-30</td><td class="action-other">Other</td>
+            <td class="text-cell">"I paid the $800 annual offer with crypto, want to know if effective"</td>
+            <td><span class="excluded-label">Excluded — account question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">BF payment confirmation request.</td>
+          </tr>
+          <tr>
+            <td class="row-num">10</td><td>2025-12-01</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"never able to use properly — English isn't very good" / "not enough time to get the most out"</td>
+            <td><span class="cat c3">Language Barrier</span> <span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Dual reason: language + time. No product criticism.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">11</td><td>2025-12-02</td><td class="action-other">Other</td>
+            <td class="text-cell">"Just ordered another year — when does my current subscription end?"</td>
+            <td><span class="excluded-label">Excluded — renewal confirmation</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Active renewal, not churn.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">12</td><td>2025-12-03</td><td class="action-other">Other</td>
+            <td class="text-cell">"Want to change email address"</td>
+            <td><span class="excluded-label">Excluded — account management</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Email change request.</td>
+          </tr>
+          <tr>
+            <td class="row-num">13</td><td>2025-12-03</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"Overload of things to look through" / "busy with other parts of my life"</td>
+            <td><span class="cat c4">Content Overload</span> <span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Both overload and time mentioned. No strong product sentiment.</td>
+          </tr>
+          <tr>
+            <td class="row-num">14</td><td>2025-12-04</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"not enough time" (repeated identically in all fields)</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Minimal response. Only time mentioned. No sentiment expressed.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">15</td><td>2025-12-06</td><td class="action-other">Other</td>
+            <td class="text-cell">"end of membership?"</td>
+            <td><span class="excluded-label">Excluded — billing question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Simple billing inquiry.</td>
+          </tr>
+          <tr>
+            <td class="row-num">16</td><td>2025-12-10</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"same things taught in DYD" / "tough time understanding Melchior" / "More DeFi strategies would be great"</td>
+            <td><span class="cat c2">Content Mismatch</span> <span class="cat c7">Content Quality</span></td>
+            <td><span class="pill pill-negative">Negative</span></td>
+            <td style="font-size:12px; color:#555;">Recycled content + comprehension issue with a specific instructor. Actionable.</td>
+          </tr>
+          <tr>
+            <td class="row-num">17</td><td>2025-12-15</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"nothing special" / "don't have enough time" / "Keep the good work"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Encourages team at the end. "Nothing special" read as non-committal given the positive close.</td>
+          </tr>
+          <tr>
+            <td class="row-num">18</td><td>2025-12-19</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"It is valuable" / "I didn't have time to utilize everything"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Explicitly validates content value. Pure time constraint.</td>
+          </tr>
+          <tr>
+            <td class="row-num">19</td><td>2026-01-08</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"Presentations and Calls" (least) / "can't watch all the calls" / "so many videos"</td>
+            <td><span class="cat c1">No Time</span> <span class="cat c4">Content Overload</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Time + volume together. Complaint is likely about quantity, not quality.</td>
+          </tr>
+          <tr>
+            <td class="row-num">20</td><td>2026-01-12</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"DeFi is not my focus anymore" / "Not enough content of interest"</td>
+            <td><span class="cat c5">Left Crypto</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Explicit pivot away from DeFi. Not a product issue.</td>
+          </tr>
+          <tr>
+            <td class="row-num">21</td><td>2026-01-12</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"I no longer do DeFi" / "I've moved in a different direction with crypto"</td>
+            <td><span class="cat c5">Left Crypto</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Moving away from DeFi entirely.</td>
+          </tr>
+          <tr>
+            <td class="row-num">22</td><td>2026-01-13</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"I've already completed this twice."</td>
+            <td><span class="cat c10">Completed Content</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Content exhaustion, not dissatisfaction. Completed the program twice.</td>
+          </tr>
+          <tr>
+            <td class="row-num">23</td><td>2026-01-14</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"TDE Pro ist amazing... But my Priority changed"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Explicit praise. Life priorities shifted. Return intent implied.</td>
+          </tr>
+          <tr>
+            <td class="row-num">24</td><td>2026-01-14</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"efzfefezfezfez" / "zefzeefezfezf" / "fzeeze"</td>
+            <td><span class="cat cnf">No Feedback</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Junk data across all fields. No usable signal.</td>
+          </tr>
+          <tr>
+            <td class="row-num">25</td><td>2026-02-05</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"small cap token reports" / "Edgy could have been more visible" / "little action in the group"</td>
+            <td><span class="cat c7">Content Quality</span></td>
+            <td><span class="pill pill-negative">Negative</span></td>
+            <td style="font-size:12px; color:#555;">Detailed critique from long-time DYD supporter. Finds TDE less focused. Specific Edgy visibility request.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">26</td><td>2026-02-05</td><td class="action-other">Other</td>
+            <td class="text-cell">"turn auto-renewal off / when does membership end?"</td>
+            <td><span class="excluded-label">Excluded — account question</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Auto-renewal management. Not a cancellation form used as intended.</td>
+          </tr>
+          <tr>
+            <td class="row-num">27</td><td>2026-02-05</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"English isn't very good" / "language barrier and not enough time" / "shifted focus to other projects"</td>
+            <td><span class="cat c3">Language Barrier</span> <span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Dual barrier: language + time. Appreciates the program. Positive closing.</td>
+          </tr>
+          <tr>
+            <td class="row-num">28</td><td>2026-02-06</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"felt unorganized and too much fluff" (both fields)</td>
+            <td><span class="cat c4">Content Overload</span></td>
+            <td><span class="pill pill-negative">Negative</span></td>
+            <td style="font-size:12px; color:#555;">"Fluff" and "unorganized" are direct product criticisms. Short, blunt feedback.</td>
+          </tr>
+          <tr>
+            <td class="row-num">29</td><td>2026-02-06</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"no longer investing in crypto" / "Spanish speaker, easier to read than listen in English" / suggests Spanish subtitles</td>
+            <td><span class="cat c5">Left Crypto</span> <span class="cat c3">Language Barrier</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Dual reason + constructive suggestion. Barely used the platform.</td>
+          </tr>
+          <tr class="row-excluded">
+            <td class="row-num">30</td><td>2026-02-10</td><td class="action-other">Other</td>
+            <td class="text-cell">"Can I renew for the DYD alumni price? Missed the BF sale."</td>
+            <td><span class="excluded-label">Excluded — pricing inquiry</span></td>
+            <td><span class="pill pill-excluded">N/A</span></td>
+            <td style="font-size:12px;">Not cancellation. Pricing inquiry from a loyal DYD alumni.</td>
+          </tr>
+          <tr>
+            <td class="row-num">31</td><td>2026-02-13</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">Least: "Fundamentals knowledge" / "focusing on day trading, can't find time" / will re-enter when settled</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Shifted to day trading. Intends to return. "Fundamentals" as least valuable signals wants more advanced content.</td>
+          </tr>
+          <tr>
+            <td class="row-num">32</td><td>2026-02-14</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"Everything was very valuable" / "Markets not great, capital tied up" / "I will be back when I'm trading again!"</td>
+            <td><span class="cat c8">Market Conditions</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Explicit return intent. Pure external/macro reason. Long-time supporter.</td>
+          </tr>
+          <tr>
+            <td class="row-num">33</td><td>2026-02-17</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"1234567890" (junk) / feedback field: "i might re-enter later i dont have the money at this moment"</td>
+            <td><span class="cat c9">Price</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Junk in form fields but real signal extracted from feedback field: financial constraints.</td>
+          </tr>
+          <tr>
+            <td class="row-num">34</td><td>2026-02-17</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"Not applicable to me" across all fields</td>
+            <td><span class="cat cnf">No Feedback</span></td>
+            <td><span class="pill pill-neutral">Neutral</span></td>
+            <td style="font-size:12px; color:#555;">Declined to provide feedback. No signal.</td>
+          </tr>
+          <tr>
+            <td class="row-num">35</td><td>2026-02-20</td><td class="action-cancel">Cancel</td>
+            <td class="text-cell">"massively distracted by other things for the past year" / "you guys are on a great trajectory, hope to rejoin"</td>
+            <td><span class="cat c1">No Time</span></td>
+            <td><span class="pill pill-positive">Positive</span></td>
+            <td style="font-size:12px; color:#555;">Year-long distraction. Strong positive closing. Explicit return intent.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Classification Notes -->
+    <div class="review-notes">
+      <strong style="color:#1B2A4A;">Classification Notes:</strong><br>
+      — <strong>27 responses</strong> were classified (cancellation feedback). <strong>9 excluded</strong> (account/billing questions with no churn signal).<br>
+      — <strong>Multi-label:</strong> Rows 10, 13, 16, 19, 27, 29 had two co-occurring reasons. Both were counted independently in the charts.<br>
+      — <strong>Sentiment logic:</strong> Positive = member praises product or signals return intent. Negative = product is the primary failure cited. Neutral = factual, no strong polarity.<br>
+      — <strong>Row 33:</strong> Junk in form fields — real signal extracted from the feedback field ("don't have the money"), classified as Price.<br>
+      — <strong>Row 17:</strong> "nothing special" as least valuable was read as non-committal, given the encouraging closing line.
+    </div>
+  </div>
+
+  </div><!-- end tab-review -->
+
+  <div style="text-align:center; padding:20px; color:#999; font-size:12px;">
+    TDE Pro Churn Analysis Report | Generated by AI for The DeFi Edge | February 2026
+  </div>
+</div>
+
+<script>
+function switchTab(tab) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  event.target.classList.add('active');
+  // Initialize charts on first view
+  if (tab === 'reasons' && !window.reasonsChartsInit) {
+    initReasonsCharts();
+    window.reasonsChartsInit = true;
+  }
+}
+
+const colors = { active:'#4CAF50', pending:'#FFC107', churn:'#FF9800', refund:'#F44336', dark:'#1B2A4A' };
+
+// Status Pie
+new Chart(document.getElementById('statusPie'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Active (40)','Pending Renewal (37)','Churn (19)','Refund (7)'],
+    datasets: [{ data: [40,37,19,7], backgroundColor: [colors.active, colors.pending, colors.churn, colors.refund], borderWidth: 2, borderColor: '#fff' }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+});
+
+// Tier Bar
+new Chart(document.getElementById('tierBar'), {
+  type: 'bar',
+  data: {
+    labels: ['$700 (DYD Legacy)', '$1000 (Current)'],
+    datasets: [
+      { label:'Active', data:[30,10], backgroundColor:colors.active },
+      { label:'Pending', data:[25,12], backgroundColor:colors.pending },
+      { label:'Churn', data:[19,0], backgroundColor:colors.churn },
+      { label:'Refund', data:[4,3], backgroundColor:colors.refund },
+    ]
+  },
+  options: { responsive:true, maintainAspectRatio:false, scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}, plugins:{legend:{position:'bottom'}} }
+});
+
+// Payment Bar
+new Chart(document.getElementById('paymentBar'), {
+  type: 'bar',
+  data: {
+    labels: ['Credit Card', 'Crypto'],
+    datasets: [
+      { label:'Active', data:[33,7], backgroundColor:colors.active },
+      { label:'Pending', data:[0,37], backgroundColor:colors.pending },
+      { label:'Churn', data:[18,1], backgroundColor:colors.churn },
+      { label:'Refund', data:[5,2], backgroundColor:colors.refund },
+    ]
+  },
+  options: { responsive:true, maintainAspectRatio:false, scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}, plugins:{legend:{position:'bottom'}} }
+});
+
+// Cross Bar
+new Chart(document.getElementById('crossBar'), {
+  type: 'bar',
+  data: {
+    labels: ['$700+CC','$700+Crypto','$1000+CC','$1000+Crypto'],
+    datasets: [
+      { label:'Active', data:[24,6,9,1], backgroundColor:colors.active },
+      { label:'Pending', data:[0,25,0,12], backgroundColor:colors.pending },
+      { label:'Churn', data:[18,1,0,0], backgroundColor:colors.churn },
+      { label:'Refund', data:[4,0,1,2], backgroundColor:colors.refund },
+    ]
+  },
+  options: { responsive:true, maintainAspectRatio:false, scales:{x:{stacked:true},y:{stacked:true,beginAtZero:true}}, plugins:{legend:{position:'bottom'}} }
+});
+
+// BF Pie
+new Chart(document.getElementById('bfPie'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Annual @ $800 (13)','Lifetime @ $2,800 (2)','Unknown (1)'],
+    datasets: [{ data:[13,2,1], backgroundColor:[colors.active, colors.dark, '#999'], borderWidth:2, borderColor:'#fff' }]
+  },
+  options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}} }
+});
+
+// BF Status
+new Chart(document.getElementById('bfStatus'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Active (13)','Pending Renewal (3)'],
+    datasets: [{ data:[13,3], backgroundColor:[colors.active, colors.pending], borderWidth:2, borderColor:'#fff' }]
+  },
+  options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{position:'bottom'}} }
+});
+
+
+function initReasonsCharts() {
+  // Reasons Bar Chart
+  new Chart(document.getElementById('reasonsBar'), {
+    type: 'bar',
+    data: {
+      labels: ['No Time','Content Mismatch','Language Barrier','Content Overload','Left Crypto','Platform UX','Content Quality','Other'],
+      datasets: [{
+        label: 'Members',
+        data: [13,3,3,3,3,2,2,3],
+        backgroundColor: ['#1B2A4A','#FF9800','#9C27B0','#F44336','#607D8B','#E91E63','#795548','#999'],
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      scales: { x: { beginAtZero: true, ticks: { stepSize: 2 } } },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  // Sentiment Pie
+  new Chart(document.getElementById('sentimentPie'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Positive — Would Return (11)','Neutral (12)','Negative — Dissatisfied (4)'],
+      datasets: [{ data: [11,12,4], backgroundColor: ['#4CAF50','#FFC107','#F44336'], borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom' }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>
